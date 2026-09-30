@@ -81,9 +81,22 @@ def get_param(x_data,y_data, param_curve, precision = 1000):
             u_closest = u
     return u_closest
 
-def find_amplitude(start, end, points):
-    # Draw a line between the start and the end
-     return
+
+
+
+def get_widths(left_bank_UTM, right_bank_UTM):
+
+    # Get the parametric curves
+    left_curve = get_curve(left_bank_UTM)
+    right_curve = get_curve(right_bank_UTM)
+
+    # Get tangent lines
+    left_curve_deriv1 = left_curve.derivative(1)
+    right_curve_deriv1 = right_curve.derivative(1)
+
+    # Sample u values, third argument is number of places to calculate the width
+    u = np.linspace(0,1,500)
+    return
 
 # CSV reader to read in Jack and Tian's data.
 data = pd.read_csv('Path1_UTM_tian.csv', header=None)
