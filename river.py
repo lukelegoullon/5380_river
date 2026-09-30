@@ -90,16 +90,19 @@ def get_widths(left_bank_UTM, right_bank_UTM):
     left_curve = get_curve(left_bank_UTM)
     right_curve = get_curve(right_bank_UTM)
 
-    # Get tangent lines
+    # Derivatives of left and right curves. With cubic splines, the first and second derivatives are continuous.
     left_curve_deriv1 = left_curve.derivative(1)
     right_curve_deriv1 = right_curve.derivative(1)
 
-    # Sample u values, third argument is number of places to calculate the width
+    # Sample u values, third argument is number of places to calculate the width. 
+    # the parameter, u, ranges from 0, to 1. Here we choose 500 sample points for the width
     u = np.linspace(0,1,500)
-    return
+
+    # From here, we need to find the normal curve to the tangent line on one bank and intersect it with the other shoreline.
+    return 
 
 # CSV reader to read in Jack and Tian's data.
-data = pd.read_csv('Path1_UTM_tian.csv', header=None)
+data = pd.read_csv('Path1_UTM.csv', header=None)
 easting = data[0]
 northing = data[1]
 
@@ -108,15 +111,20 @@ river_utm_data = np.column_stack((easting, northing))
 # param_curve=get_curve(river_utm_data[0], river_utm_data)
 # plot_curve(param_curve)
 
+# Cehck how much smoothing is best for radius of curvature
+def radius_of_curvature_check():
+    s_vals = [0,10,30,100,300,500,1000,2000,2500,3000, 4000]
+    for s in s_vals:
+        param_curve = get_curve(river_utm_data[0], river_utm_data,s)
+        radius_of_curvature = find_radius_of_curvature(param_curve, -3.97578385,  0.15121202)
+        
+        print("Radius of curvature is ", radius_of_curvature, "for s =", s)
+        if s == 500:
+                plot_curve(param_curve,processed_data)
+
+
+# process data -- subtract the start utm value from each data point and take the transpose (transpose is necessary for the spline)
 processed_data = process_data(river_utm_data[0], river_utm_data)
 print(processed_data.transpose()[6])
 
-# Find Radius of curvature:
-s_vals = [0,10,30,100,300,500,1000,2000,2500,3000, 4000]
-for s in s_vals:
-    param_curve = get_curve(river_utm_data[0], river_utm_data,s)
-    radius_of_curvature = find_radius_of_curvature(param_curve, -3.97578385,  0.15121202)
-    
-    print("Radius of curvature is ", radius_of_curvature, "for s =", s)
-    if s == 500:
-            plot_curve(param_curve,processed_data)
+radius_of_curvature_check()
