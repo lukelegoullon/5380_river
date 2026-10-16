@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import math
 import sys
 from scipy.optimize import root
+from scipy.signal import find_peaks
 
 # We want to give coordinates
 # And find the radius of curvature amplitude and wave length
@@ -253,6 +254,37 @@ def plot_curves_and_widths(widths, norm_lines, left_curve, right_curve):
     plt.show()
 
         
+##############################
+# WAVELENGTHS
+##############################
+
+def get_wavelengths(param_curve, dist=20):
+    u = np.linspace(0,1,500)
+    x_centered_curve = param_curve(u)[0] - np.mean(param_curve(u)[0])
+    y_centered_curve = param_curve(u)[1] - np.mean(param_curve(u)[1])
+    curve_centerline = np.polynomial.Polynomial.fit(x_centered_curve, y_centered_curve, 1)
+    # plt.plot(x_centered_curve, y_centered_curve, label='Centered Curve')
+    # plt.plot(x_centered_curve, curve_centerline(x_centered_curve), label='Fitted Centerline', color='orange')
+    # plt.xlabel("Easting (m)")
+    # plt.ylabel("Northing (m)")
+    # plt.axis("equal")
+    # plt.show()
+    theta = np.arctan(curve_centerline(1))
+    param_curve_rotated = [param_curve(u)[0]*np.cos(theta) + param_curve(u)[1]*np.sin(theta), -param_curve(u)[0]*np.sin(theta) + param_curve(u)[1]*np.cos(theta)]
+
+    peaks, _ = find_peaks(param_curve_rotated[1], distance=dist)
+    # Calculate wavelengths as distances between consecutive extrema
+    wavelengths = []
+    x_curve = param_curve_rotated[0]
+    x_peaks = x_curve[peaks]
+    plt.plot(param_curve_rotated[0], param_curve_rotated[1], label='Rotated Curve')
+    plt.scatter(param_curve_rotated[0][peaks], param_curve_rotated[1][peaks], color='red', label='Extrema')
+    plt.axis("equal")
+    plt.show()
+    for i in range(len(x_peaks) - 1):
+        wavelength = x_peaks[i + 1] - x_peaks[i]
+        wavelengths.append(wavelength)
+    return wavelengths, x_peaks
 
 
 # CSV reader to read in Jack and Tian's data.
