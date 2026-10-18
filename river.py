@@ -4,11 +4,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import math
 import sys
+import os
 from scipy.optimize import root
 
 # We want to give coordinates
 # And find the radius of curvature amplitude and wave length
 
+file_dir = os.path.dirname(os.path.abspath(__file__))
+
+os.chdir(file_dir)
+
+print(os.getcwd())
 
 # CSV reader
 # data = pd.read_csv('river_data.csv')
@@ -26,7 +32,7 @@ from scipy.optimize import root
 # TODO: Test, see what I want to do with multiple curves
 def process_data(UTM_data, UTM_data_2 = None):
     if(UTM_data_2 is None):
-        shared_origin = [5000000,5000000]
+        # shared_origin = [5000000,5000000]
         easting = UTM_data[0]
         northing = UTM_data[1]
 
@@ -36,6 +42,7 @@ def process_data(UTM_data, UTM_data_2 = None):
         _, idx = np.unique(data, axis=0, return_index=True)
         data = data[np.sort(idx)]
 
+        shared_origin = data[0]
         numerical = np.zeros(np.shape(data))
         for i in range(len(data)):
             numerical[i] = data[i] - shared_origin
@@ -62,7 +69,37 @@ def process_data(UTM_data, UTM_data_2 = None):
         for i in range(len(data2)):
             numerical2[i] = data2[i] - shared_origin
         return [numerical1.transpose(), numerical2.transpose()]
+
+# Returns the origin of the code, i.e. the easting northing values that the data is subtracted by.
+# When we want values such as width at a specific location we need this value to normalize the easting and northing.
+# Before getting a width, call this and pass it to the origin category. Get the normalized location.
+
+def get_shared_origin(UTM_data1, UTM_data2 = None):
+    if UTM_data2 is None:
+        easting = UTM_data1[0]
+        northing = UTM_data1[1]
+
+        data = np.column_stack((easting, northing))
         
+        # AI helped me get unique entries in a matrix
+        _, idx = np.unique(data, axis=0, return_index=True)
+        data = data[np.sort(idx)]
+        return data[0]
+    else:
+        easting1 = UTM_data1[0]
+        northing1 = UTM_data1[1]
+        easting2 = UTM_data2[0]
+        northing2 = UTM_data2[1]
+
+        data1 = np.column_stack((easting1, northing1))
+        _, idx = np.unique(data1, axis=0, return_index=True)
+        data1 = data1[np.sort(idx)]
+
+        data2 = np.column_stack((easting2, northing2))
+        _, idx2 = np.unique(data2, axis=0, return_index=True)
+        data2 = data2[np.sort(idx2)]
+
+        return (data1[0] + data2[0])/2
 
 # Interpolate points to fit a line to the data
 
@@ -117,13 +154,12 @@ def get_norm_lines(curve, num_lines = 20):
    
     norm_lines = []
 
-    right_curve_deriv1 = curve.derivative(1)
+    # right_curve_deriv1 = curve.derivative(1)
 
     u = np.linspace(0,1, num_lines)
     norm_lines = []
     for num in u:
-        deriv = right_curve_deriv1(num)
-        normal_slope = [-deriv[1], deriv[0]]
+        normal_slope = get_norm_slope(num, curve)
         normal_line = find_norm_line(normal_slope, curve, num)
         norm_lines.append(normal_line)
     return norm_lines
@@ -146,7 +182,10 @@ def get_widths(other_curve, norm_lines):
     # From here, we need to find the normal curve to the tangent line on one bank and intersect it with the other shoreline.
     return widths
 
-
+def get_norm_slope(u,curve):
+    deriv = curve.derivative(1)(u)
+    normal_slope = [-deriv[1], deriv[0]]
+    return normal_slope
 
 # Returns the parametric normal curve
 def find_norm_line(norm_slope, param_curve, u):
@@ -159,7 +198,16 @@ def find_norm_line(norm_slope, param_curve, u):
     normal_curve = lambda param: [m_1 * param + x, m_2*param + y]
     return normal_curve
 
+def get_width_at_location(easting, northing, origin, left_curve, right_curve):
+    normalized_location = np.array([easting, northing]) - origin
+    u = get_param(easting, northing, right_curve)
+    norm_line = find_norm_line(get_norm_slope(u,right_curve), right_curve, u)
+    width_arr = get_widths(left_curve, [norm_line])
+    width = width_arr[0]
+    print("width at easting", easting, "and northing", northing, "is", width, "m")
 
+    
+    # norm_line = find_norm_line()
 
 ##############################
 # NORM LINE INTERSECTION
@@ -199,9 +247,6 @@ def find_first_intersect(other_curve, norm_line, num_params= 100000):
     solution = root(difference, [guess_curve_param, guess_line_param])
     u, t = solution.x
     return t
-
-def get_width_from_data_point(easting, northing):
-    return
 
 ##############################
 # PLOTTING
@@ -292,11 +337,17 @@ b_splines = get_curve(left_data, right_data)
 left_curve = b_splines[0]
 right_curve = b_splines[1]
 
+processed_data = process_data(right_data)
+print(np.shape(processed_data))
 plot_curve(left_curve)
 plot_curve(right_curve)
 norm_lines = get_norm_lines(right_curve)
 widths = get_widths(left_curve, norm_lines)
-plot_curves_and_widths(widths, norm_lines, left_curve, right_curve)
-print(widths)
+# plot_curves_and_widths(widths, norm_lines, left_curve, right_curve
+
+# origin = get_shared_origin(left_data, right_data)
+print(np.shape(processed_data))
+# THE ONLY PROBLEM< IS MY EASTING AND NORTHING ARE NORMALIZED
+width_at_loc = get_width_at_location(processed_data[0][360], processed_data[1][360], [0,0],left_curve,right_curve)
 
 
