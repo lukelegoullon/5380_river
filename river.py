@@ -333,9 +333,6 @@ def get_wavelengths(param_curve, dist=20, num_points=None):
     return wavelengths, x_peaks
 
 
-def plot_loc_vs_width(width_data, loc_data):
-    return
-
 def plot_river_info(river_dict, num_points, river_name="River"):
 
     widths = {}
@@ -363,7 +360,6 @@ def plot_river_info(river_dict, num_points, river_name="River"):
 
         norm_lines = get_norm_lines(right_curve, num_points)
         widths[year] = get_widths(left_curve, norm_lines)
-        plot_curves_and_widths(widths[year], norm_lines, left_curve, right_curve)
 
         for u in u_list:
             loc_list.append(center_curve(u))
@@ -371,7 +367,7 @@ def plot_river_info(river_dict, num_points, river_name="River"):
 
         # For curvature smooth out centerline data more:
         curv_list = []
-        center_data_smooth = get_curve(center_data, None, smooth_factor=3000)
+        center_data_smooth = get_curve(center_data, None, smooth_factor=4000)
         for i in range(len(u_list)):
             curv_list.append(find_radius_of_curvature(center_data_smooth, u=u_list[i]))
         curvatures[year] = curv_list
