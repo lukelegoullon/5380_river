@@ -133,12 +133,13 @@ def get_param(x_data,y_data, param_curve, precision = 1000):
             u_closest = u
     return u_closest
 
-def find_radius_of_curvature(param_curve,x,y):
+def find_radius_of_curvature(param_curve,x = None,y = None, u = None):
     # # clean_UTM_data is 2 x num_data_points. Take the transpose to iterate easily by data point.
     # data = clean_UTM_data.transpose()
     # for i in range(1, len(data) - 1):
+    if u is None:  
+        u = get_param(x,y,param_curve)
     
-    u = get_param(x,y,param_curve)
     deriv_1 = param_curve.derivative(1)
     deriv_2 = param_curve.derivative(2)
 
@@ -175,7 +176,7 @@ def get_widths(other_curve, norm_lines):
     # the parameter, u, ranges from 0, to 1. Here we choose 500 sample points for the width
     i = 0 
     for line in norm_lines:
-        print(line(find_first_intersect(other_curve, line, 10**4)))
+        # print(line(find_first_intersect(other_curve, line, 10**4)))
         
         width = np.linalg.norm(np.array(line(find_first_intersect(other_curve, line, 10**4))) - np.array(line(0)))
         widths[i] = width
@@ -205,7 +206,7 @@ def get_width_at_location(easting, northing, origin, left_curve, right_curve):
     norm_line = find_norm_line(get_norm_slope(u,right_curve), right_curve, u)
     width_arr = get_widths(left_curve, [norm_line])
     width = width_arr[0]
-    print("width at easting", easting, "and northing", northing, "is", width, "m")
+    # print("width at easting", easting, "and northing", northing, "is", width, "m")
 
     
     # norm_line = find_norm_line()
@@ -237,8 +238,8 @@ def find_first_intersect(other_curve, norm_line, num_params= 100000):
     # We make our guess parameter guess, by minizing the parameter on each line closest to this point
     guess_curve_param = get_param(guess_point[0], guess_point[1], other_curve)
     guess_line_param = get_param(guess_point[0], guess_point[1], norm_line)
-    print("curve param guess is ", guess_curve_param)
-    print("line param guess is ", guess_line_param)
+    # print("curve param guess is ", guess_curve_param)
+    # print("line param guess is ", guess_line_param)
 
     def difference(params):
         u,t = params
@@ -280,7 +281,7 @@ def plot_width(norm_line, norm_line_width):
 
     final_t = close_point_to_line(end, norm_line)
     t = np.linspace(0, final_t, 1000)
-    plt.plot(norm_line(t)[0], norm_line(t)[1], label=str(round(norm_line_width,2)))
+    plt.plot(norm_line(t)[0], norm_line(t)[1])
 
 def plot_curves_and_widths(widths, norm_lines, left_curve, right_curve):
     # norm_lines is list of all norm lines
@@ -288,7 +289,7 @@ def plot_curves_and_widths(widths, norm_lines, left_curve, right_curve):
     plot_curve(right_curve)
     for i in range(len(norm_lines)):
         t = find_first_intersect(left_curve, norm_lines[i], 10**4)
-        print("parameter for line intersection is", t)
+        # print("parameter for line intersection is", t)
         pt = norm_lines[i](t)
         plt.plot(*pt, 'ko', markersize = 4)
         plot_width(norm_lines[i], widths[i])
@@ -303,7 +304,7 @@ def plot_curves_and_widths(widths, norm_lines, left_curve, right_curve):
 # WAVELENGTHS
 ##############################
 
-def get_wavelengths(param_curve, dist=20):
+def get_wavelengths(param_curve, dist=20, num_points=None):
     u = np.linspace(0,1,500)
     x_centered_curve = param_curve(u)[0] - np.mean(param_curve(u)[0])
     y_centered_curve = param_curve(u)[1] - np.mean(param_curve(u)[1])
@@ -332,6 +333,164 @@ def get_wavelengths(param_curve, dist=20):
     return wavelengths, x_peaks
 
 
+def plot_loc_vs_width(width_data, loc_data):
+    return
+
+def plot_river_info(river_dict, num_points, river_name="River"):
+
+    widths = {}
+    locs = {}
+    curvatures = {}
+    wavelengths = {}
+
+    
+    for year in river_dict.keys():
+        left_filepath = river_dict[year]["LEFT"][0]
+        right_filepath = river_dict[year]["RIGHT"][0]
+        center_filepath = river_dict[year]["CENTER"][0]
+
+        left_data = pd.read_csv(left_filepath, header=None)
+        right_data = pd.read_csv(right_filepath, header=None)
+        center_data = pd.read_csv(center_filepath, header=None)
+
+        b_splines = get_curve(left_data, right_data)
+        left_curve = b_splines[0]
+        right_curve = b_splines[1]
+        center_curve = get_curve(center_data)
+
+        u_list = np.linspace(0,1,num_points)
+        loc_list = []
+
+        norm_lines = get_norm_lines(right_curve, num_points)
+        widths[year] = get_widths(left_curve, norm_lines)
+        plot_curves_and_widths(widths[year], norm_lines, left_curve, right_curve)
+
+        for u in u_list:
+            loc_list.append(center_curve(u))
+        locs[year] = loc_list
+
+        # For curvature smooth out centerline data more:
+        curv_list = []
+        center_data_smooth = get_curve(center_data, None, smooth_factor=3000)
+        for i in range(len(u_list)):
+            curv_list.append(find_radius_of_curvature(center_data_smooth, u=u_list[i]))
+        curvatures[year] = curv_list
+
+        
+    plot_curvature_vs_width(curvatures,widths, river_name)
+    plot_width_vs_location(locs, widths, river_name)
+    plot_3d_widths(locs, widths, river_name)
+
+
+# The following three plotting functions are from ChatGPT
+def plot_curvature_vs_width(curvatures, widths, rivername):
+
+    plt.figure()
+
+    for year in widths:
+        curvature_values = np.asarray(curvatures[year])
+        width_values = np.asarray(widths[year])
+
+        plt.scatter(curvature_values, width_values, label=year)
+
+    plt.xlabel("Curvature (1/m)")
+    plt.ylabel("Width (m)")
+    plt.title(f"Width vs. Curvature of {rivername}")
+    plt.legend()
+    plt.grid(True)
+
+    plt.show()
+    
+
+
+def plot_3d_widths(locs, widths, rivername):
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    for year in widths:
+        locations = np.asarray(locs[year])
+        width_values = np.asarray(widths[year])
+
+        easting = locations[:, 0]
+        northing = locations[:, 1]
+
+        ax.plot(easting, northing, width_values, label=year)
+
+    ax.set_xlabel("Easting (m)")
+    ax.set_ylabel("Northing (m)")
+    ax.set_zlabel("Width (m)")
+    ax.set_title(f"River {rivername} Width by Location")
+    ax.legend()
+
+    plt.show()
+
+def plot_width_vs_location(locs, widths, rivername):
+
+    plt.figure()
+
+    for year in widths:
+        locations = np.asarray(locs[year])
+        width_values = np.asarray(widths[year])
+
+        # Distance between consecutive points
+        distances = np.linalg.norm(np.diff(locations, axis=0), axis=1)
+
+        # Cumulative distance along river
+        cumulative_distance = np.insert(np.cumsum(distances), 0, 0)
+
+        plt.plot(cumulative_distance, width_values, label=year)
+
+    plt.xlabel("Distance Along River (m)")
+    plt.ylabel("Width (m)")
+    plt.title("River Width vs. Distance Along River")
+    plt.legend()
+    plt.grid(True)
+
+    plt.show()
+
+def dict_of_riverfiles(rivername):
+
+    # Find and sort the .csv files with river name in it
+    current_dir = os.getcwd()
+
+    river_data_files = []
+    curves_by_year = {}
+
+    right_curve_names = ["RIGHT", "SOUTH", "EAST"]
+    left_curve_names = ["LEFT", "NORTH", "WEST"]
+
+    # Track all files having to do with a river
+    for filename in os.listdir(current_dir):
+        filepath = os.path.join(current_dir, filename)
+
+        if rivername in filename:
+            river_data_files.append(filepath)
+
+    # Sort the files by year in a dictionary
+    for river_file in river_data_files:
+        filename = river_file[river_file.rfind("\\") + 1:]
+        year = filename[filename.rfind(".") - 2:filename.rfind(".")]
+
+        direction_rindex = filename.rfind("_")
+        direction_lindex = filename.rfind("_", 0, direction_rindex)
+        direction = filename[direction_lindex + 1: direction_rindex]
+
+        if year not in curves_by_year:
+            curves_by_year[year] = {
+                "RIGHT": [],
+                "LEFT": [],
+                "CENTER":[]
+            }
+
+        if direction.upper() in right_curve_names:
+            curves_by_year[year]["RIGHT"].append(river_file)
+        elif direction.upper() in left_curve_names:
+            curves_by_year[year]["LEFT"].append(river_file)
+        elif direction.upper() == "CENTER":
+            curves_by_year[year]["CENTER"].append(river_file)
+    return curves_by_year
+    
 # CSV reader to read in Jack and Tian's data.
 data = pd.read_csv('Path1_UTM.csv', header=None)
 easting = data[0]
@@ -349,7 +508,7 @@ def radius_of_curvature_check():
         param_curve = get_curve(river_utm_data,s)
         radius_of_curvature = find_radius_of_curvature(param_curve, -3.97578385,  0.15121202)
         
-        print("Radius of curvature is ", radius_of_curvature, "for s =", s)
+        # print("Radius of curvature is ", radius_of_curvature, "for s =", s)
         # if s == 500:
         #         plot_curve(param_curve,processed_data)
 
@@ -359,27 +518,29 @@ def radius_of_curvature_check():
 # print(processed_data.transpose()[6])
 
 # CSV reader to read in Jack and Tian's data.
-left_data = pd.read_csv('Path2_leftedge_UTM.csv', header=None)
-# left_curve = get_curve(left_data)
+# left_data = pd.read_csv('Path2_leftedge_UTM.csv', header=None)
+# # left_curve = get_curve(left_data)
 
-right_data = pd.read_csv('Path2_rightedge_UTM.csv', header=None)
-# right_curve = get_curve(right_data)
+# right_data = pd.read_csv('Path2_rightedge_UTM.csv', header=None)
+# # right_curve = get_curve(right_data)
 
-b_splines = get_curve(left_data, right_data)
-left_curve = b_splines[0]
-right_curve = b_splines[1]
+# b_splines = get_curve(left_data, right_data)
+# left_curve = b_splines[0]
+# right_curve = b_splines[1]
 
-processed_data = process_data(right_data)
-print(np.shape(processed_data))
-plot_curve(left_curve)
-plot_curve(right_curve)
-norm_lines = get_norm_lines(right_curve)
-widths = get_widths(left_curve, norm_lines)
-# plot_curves_and_widths(widths, norm_lines, left_curve, right_curve
+# processed_data = process_data(right_data)
+# print(np.shape(processed_data))
+# plot_curve(left_curve)
+# plot_curve(right_curve)
+# norm_lines = get_norm_lines(right_curve)
+# widths = get_widths(left_curve, norm_lines)
+# # plot_curves_and_widths(widths, norm_lines, left_curve, right_curve
 
-# origin = get_shared_origin(left_data, right_data)
-print(np.shape(processed_data))
-# THE ONLY PROBLEM< IS MY EASTING AND NORTHING ARE NORMALIZED
-width_at_loc = get_width_at_location(processed_data[0][360], processed_data[1][360], [0,0],left_curve,right_curve)
+# # origin = get_shared_origin(left_data, right_data)
+# print(np.shape(processed_data))
+# # THE ONLY PROBLEM< IS MY EASTING AND NORTHING ARE NORMALIZED
+# width_at_loc = get_width_at_location(processed_data[0][360], processed_data[1][360], [0,0],left_curve,right_curve)
 
 
+Gibbon_River_Dict = dict_of_riverfiles("Gibbon_River")
+plot_river_info(Gibbon_River_Dict, 500, "Gibbon River")
