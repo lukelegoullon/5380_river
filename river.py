@@ -538,5 +538,76 @@ def radius_of_curvature_check():
 # width_at_loc = get_width_at_location(processed_data[0][360], processed_data[1][360], [0,0],left_curve,right_curve)
 
 
+def find_center_of_curvature(param_curve, u):
+    deriv_1 = param_curve.derivative(1)
+    deriv_2 = param_curve.derivative(2)
+
+    kappa = (deriv_1(u)[0]*deriv_2(u)[1] - deriv_1(u)[1]*deriv_2(u)[0]) /(((deriv_1(u)[0])**2 + (deriv_1(u)[1])**2)**(3/2))
+    radius_of_curvature = 1/abs(kappa)
+
+    # Calculate the unit normal vector
+    normal_vector = np.array([-deriv_1(u)[1], deriv_1(u)[0]])
+    normal_vector /= np.linalg.norm(normal_vector)
+
+    # calculate values for a point slightly offset from the original point to find the way the curve is pointing
+    u_offset = u + 1e-6
+    kappa_offset = (deriv_1(u_offset)[0]*deriv_2(u_offset)[1] - deriv_1(u_offset)[1]*deriv_2(u_offset)[0]) /(((deriv_1(u_offset)[0])**2 + (deriv_1(u_offset)[1])**2)**(3/2))
+    radius_of_curvature_offset = 1/abs(kappa_offset)
+
+    # Calculate the unit normal vector
+    normal_vector_offset = np.array([-deriv_1(u_offset)[1], deriv_1(u_offset)[0]])
+    normal_vector_offset /= np.linalg.norm(normal_vector_offset)
+
+    center_offset_pos = np.array(param_curve(u_offset)) + radius_of_curvature_offset * normal_vector_offset
+    center_offset_neg = np.array(param_curve(u_offset)) - radius_of_curvature_offset * normal_vector_offset
+        
+    # Calculate the center of curvature
+    center_of_curvature_pos = np.array(param_curve(u)) + radius_of_curvature * normal_vector
+    center_of_curvature_neg = np.array(param_curve(u)) - radius_of_curvature * normal_vector
+
+    if np.linalg.norm([center_offset_pos - center_of_curvature_pos], 2) < np.linalg.norm([center_offset_neg - center_of_curvature_neg], 2):
+        center_of_curvature = center_of_curvature_pos
+    else:
+        center_of_curvature = center_of_curvature_neg
+
+    return center_of_curvature, radius_of_curvature
+
+
+def simulate_river(param_curve, t, precision=1000):
+    u = np.linspace(0, 1, precision)
+    New_river = np.zeros((len(u), 2))
+    for i in range(len(u)):
+        u_i = u[i]
+        center_of_curvature, radius_of_curvature_OG = find_center_of_curvature(param_curve, u_i)
+        speed_coeff = 1/(radius_of_curvature_OG**2)  # Adjust this coefficient to control the speed of change
+        # print("Speed coefficient is ", speed_coeff)
+        radius_of_curvature = radius_of_curvature_OG * (1 + speed_coeff * t)
+        direction_vector = np.array([param_curve(u_i)[0] - center_of_curvature[0], param_curve(u_i)[1] - center_of_curvature[1]])
+        direction_vector /= np.linalg.norm(direction_vector)
+
+        New_river[i] = center_of_curvature + radius_of_curvature * direction_vector
+    
+    New_river_data = pd.DataFrame(New_river,columns=data.columns)
+    return New_river_data
+
+
+
+
+def simulate_river_over_time(param_curve, time_step, num_steps):
+    time_steps = np.linspace(time_step, time_step * num_steps, num_steps)
+    river_paths = []
+    for t in time_steps:
+        if t == time_steps[0]:
+            New_river_data = simulate_river(param_curve, time_step)
+        else:
+            New_river_data = simulate_river(New_river_curve, time_step)
+
+        New_river_curve = get_curve(New_river_data, None, smooth_factor=10)
+        river_paths.append(New_river_curve)
+
+    return river_paths
+
+
+
 Gibbon_River_Dict = dict_of_riverfiles("Gibbon_River")
 plot_river_info(Gibbon_River_Dict, 500, "Gibbon River")
