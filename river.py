@@ -30,10 +30,14 @@ print(os.getcwd())
 ###################
 # Take UTM data, and find their distance from the start of a curve
 
-# TODO: Test, see what I want to do with multiple curves
+# INPUTS:
+# 1 or 2 UTM_data files (easting, northing)
+
+# Outputs:
+# Normalized data of shape (2, num_points) -- ready to be interpolated by matlab B-spline function
+# If we have two rivers, it returns an array of data of both rivers, normalized by the average between the two rivers at the beginning. 
 def process_data(UTM_data, UTM_data_2 = None):
     if(UTM_data_2 is None):
-        # shared_origin = [5000000,5000000]
         easting = UTM_data[0]
         northing = UTM_data[1]
 
@@ -332,6 +336,35 @@ def get_wavelengths(param_curve, dist=20, num_points=None):
         wavelengths.append(wavelength)
     return wavelengths, x_peaks
 
+def full_year(two_dig_year):
+    two_dig_year = str(two_dig_year)
+    if(0<= int(two_dig_year) <= 26):
+        return int('20' + two_dig_year)
+    return int('19' + two_dig_year)
+
+# Need to get direction of propagation, Ask Tian! Then I can get accurate speed. 
+
+# Get the center line ofo the river, smoothed. Then, Get the easting northing at different points., Then measure distances between those points on 
+# Historical vs modern data
+# def river_speed(river_dict, num_u = 500):
+#     center_data = {}
+#     u = np.linspace(0, 1, num_u)
+#     for year in river_dict.keys():
+#         full_year_int = full_year(year)
+#         center_filepath = river_dict[year]["CENTER"][0]
+
+#         center_data = pd.read_csv(center_filepath, header=None)
+#         center_curve = get_curve(center_data, smooth_factor = 3000)
+
+#         center_data[full_year_int] = center_curve(u)
+
+#     speeds = ce
+
+
+# Test the best coeffecient and exponent by comparing restults to actual -- using Tian's code
+
+# 
+
 
 def plot_river_info(river_dict, num_points, river_name="River"):
 
@@ -378,7 +411,6 @@ def plot_river_info(river_dict, num_points, river_name="River"):
     plot_3d_widths(locs, widths, river_name)
 
 
-# The following three plotting functions are from ChatGPT
 def plot_curvature_vs_width(curvatures, widths, rivername):
 
     plt.figure()
@@ -397,7 +429,6 @@ def plot_curvature_vs_width(curvatures, widths, rivername):
 
     plt.show()
     
-
 
 def plot_3d_widths(locs, widths, rivername):
 
@@ -538,5 +569,8 @@ def radius_of_curvature_check():
 # width_at_loc = get_width_at_location(processed_data[0][360], processed_data[1][360], [0,0],left_curve,right_curve)
 
 
-Gibbon_River_Dict = dict_of_riverfiles("Gibbon_River")
-plot_river_info(Gibbon_River_Dict, 500, "Gibbon River")
+# Gibbon_River_Dict = dict_of_riverfiles("Gibbon_River")
+# plot_river_info(Gibbon_River_Dict, 500, "Gibbon River")
+
+Purus_River_Dict = dict_of_riverfiles("Purus_River")
+plot_river_info(Purus_River_Dict,500,"Purus River")
