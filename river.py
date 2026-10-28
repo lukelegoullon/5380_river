@@ -47,7 +47,7 @@ def process_data(UTM_data, UTM_data_2 = None):
         _, idx = np.unique(data, axis=0, return_index=True)
         data = data[np.sort(idx)]
 
-        shared_origin = data[0]
+        shared_origin = [0,0]
         numerical = np.zeros(np.shape(data))
         for i in range(len(data)):
             numerical[i] = data[i] - shared_origin
@@ -66,7 +66,8 @@ def process_data(UTM_data, UTM_data_2 = None):
         _, idx2 = np.unique(data2, axis=0, return_index=True)
         data2 = data2[np.sort(idx2)]
 
-        shared_origin = (data1[0] + data2[0])/2
+        shared_origin = [0,0]
+        # shared_origin = (data1[0] + data2[0])/2
         numerical1 = np.zeros(np.shape(data1))
         numerical2 = np.zeros(np.shape(data2))
         for i in range(len(data1)):
@@ -205,11 +206,12 @@ def find_norm_line(norm_slope, param_curve, u):
     return normal_curve
 
 def get_width_at_location(easting, northing, origin, left_curve, right_curve):
-    normalized_location = np.array([easting, northing]) - origin
+    # normalized_location = np.array([easting, northing]) - origin
     u = get_param(easting, northing, right_curve)
     norm_line = find_norm_line(get_norm_slope(u,right_curve), right_curve, u)
     width_arr = get_widths(left_curve, [norm_line])
     width = width_arr[0]
+    return width
     # print("width at easting", easting, "and northing", northing, "is", width, "m")
 
     
@@ -259,7 +261,7 @@ def find_first_intersect(other_curve, norm_line, num_params= 100000):
 ##############################
 
 
-def plot_curve(curve, UTM_data = None):
+def plot_curve(curve, UTM_data = None,legend_label=None):
     u = np.linspace(0,1,500)
     curve_eval = curve(u)
     x_spline = curve_eval[0]
@@ -267,7 +269,10 @@ def plot_curve(curve, UTM_data = None):
 
     # Plotting code for testing code -- gpt helped
     # plt.scatter(x_spline, y_spline, label="Measured points")
-    plt.plot(x_spline, y_spline, label="B-spline")
+    if legend_label is not None:
+        plt.plot(x_spline, y_spline, label=legend_label)
+    else: 
+        plt.plot(x_spline, y_spline, label="B-spline")
     if not UTM_data == None:
         plt.scatter(UTM_data[0], UTM_data[1], label = "Data", s=3, color = "red")
     plt.xlabel("Easting (m)")
@@ -361,10 +366,62 @@ def full_year(two_dig_year):
 #     speeds = ce
 
 
+# To compare rivers that moved, I must normalize by distance across the river. 
+
+
 # Test the best coeffecient and exponent by comparing restults to actual -- using Tian's code
+def find_best_speed_coeff(river_name):
+    river_files_dict = dict_of_riverfiles(river_name)
+    left_curves = []
+    right_curves = []
+    center_curves = []
+    for year in river_files_dict.keys():
+        left_filepath = river_files_dict[year]["LEFT"][0]
+        right_filepath = river_files_dict[year]["RIGHT"][0]
+        center_filepath = river_files_dict[year]["CENTER"][0]
 
-# 
+        left_data = pd.read_csv(left_filepath, header=None)
+        right_data = pd.read_csv(right_filepath, header=None)
+        center_data = pd.read_csv(center_filepath, header=None)
 
+        left_curve = get_curve(left_data,smooth_factor=1000)
+        right_curve = get_curve(right_data,smooth_factor=1000)
+        center_curve = get_curve(center_data,smooth_factor=1000)
+
+        left_curves.append(left_curve)
+        right_curves.append(right_curve)
+        center_curves.append(center_curve)
+
+    max_year = max(river_files_dict)
+    min_year = min(river_files_dict)
+    print("Simulating for", max_year-min_year, "years")
+
+    coeffs = np.linspace(0,3,3)
+    min_error = float("inf")
+    best_a = 0 
+
+    plot_curve(center_curves[0], legend_label="Old River")
+    for a in coeffs:
+        print("Trying coefficient ", a)
+        simulated_left_curve = simulate_river_over_time(left_curves[0], max_year-min_year, 1,a)[-1]
+        simulated_right_curve = simulate_river_over_time(right_curves[0], max_year - min_year, 1,a)[-1]
+        simulated_center_curve = simulate_river_over_time(center_curves[0],max_year-min_year, 1,a)[-1]
+        total_error = np.sum([curve_error(left_curves[-1], simulated_left_curve), curve_error(right_curves[-1], simulated_right_curve), curve_error(center_curves[-1], simulated_center_curve)])
+        if(total_error < min_error):
+            min_error = total_error
+            best_a = a
+        print("The total error for a =", a, "is", total_error)
+        plot_curve(simulated_center_curve,legend_label = str(a))
+
+    plot_curve(center_curves[-1], legend_label='Real Modern Curve')
+    plt.show()
+    print("The best coeffecient for the", river_name, " is ", best_a, "with final difference as", min_error)
+    return best_a
+
+def curve_error(curve_1, curve_2, num_points=500):
+    u = np.linspace(0,1,num_points)
+    difference = curve_1(u) - curve_2(u)
+    return np.sqrt(np.sum(difference**2))
 
 def plot_river_info(river_dict, num_points, river_name="River"):
 
@@ -405,7 +462,7 @@ def plot_river_info(river_dict, num_points, river_name="River"):
             curv_list.append(find_radius_of_curvature(center_data_smooth, u=u_list[i]))
         curvatures[year] = curv_list
 
-        
+        # plot_curves_and_widths(widths[year], norm_lines, left_curve, right_curve)
     plot_curvature_vs_width(curvatures,widths, river_name)
     plot_width_vs_location(locs, widths, river_name)
     plot_3d_widths(locs, widths, river_name)
@@ -497,7 +554,7 @@ def dict_of_riverfiles(rivername):
     # Sort the files by year in a dictionary
     for river_file in river_data_files:
         filename = river_file[river_file.rfind("\\") + 1:]
-        year = filename[filename.rfind(".") - 2:filename.rfind(".")]
+        year = full_year(filename[filename.rfind(".") - 2:filename.rfind(".")])
 
         direction_rindex = filename.rfind("_")
         direction_lindex = filename.rfind("_", 0, direction_rindex)
@@ -516,7 +573,7 @@ def dict_of_riverfiles(rivername):
             curves_by_year[year]["LEFT"].append(river_file)
         elif direction.upper() == "CENTER":
             curves_by_year[year]["CENTER"].append(river_file)
-    return curves_by_year
+    return dict(sorted(curves_by_year.items()))
     
 # CSV reader to read in Jack and Tian's data.
 data = pd.read_csv('Path1_UTM.csv', header=None)
@@ -572,5 +629,82 @@ def radius_of_curvature_check():
 # Gibbon_River_Dict = dict_of_riverfiles("Gibbon_River")
 # plot_river_info(Gibbon_River_Dict, 500, "Gibbon River")
 
-Purus_River_Dict = dict_of_riverfiles("Purus_River")
-plot_river_info(Purus_River_Dict,500,"Purus River")
+def find_center_of_curvature(param_curve, u):
+    deriv_1 = param_curve.derivative(1)
+    deriv_2 = param_curve.derivative(2)
+
+    kappa = (deriv_1(u)[0]*deriv_2(u)[1] - deriv_1(u)[1]*deriv_2(u)[0]) /(((deriv_1(u)[0])**2 + (deriv_1(u)[1])**2)**(3/2))
+    radius_of_curvature = 1/abs(kappa)
+
+    # Calculate the unit normal vector
+    normal_vector = np.array([-deriv_1(u)[1], deriv_1(u)[0]])
+    normal_vector /= np.linalg.norm(normal_vector)
+
+    # calculate values for a point slightly offset from the original point to find the way the curve is pointing
+    u_offset = u + 1e-6
+    kappa_offset = (deriv_1(u_offset)[0]*deriv_2(u_offset)[1] - deriv_1(u_offset)[1]*deriv_2(u_offset)[0]) /(((deriv_1(u_offset)[0])**2 + (deriv_1(u_offset)[1])**2)**(3/2))
+    radius_of_curvature_offset = 1/abs(kappa_offset)
+
+    # Calculate the unit normal vector
+    normal_vector_offset = np.array([-deriv_1(u_offset)[1], deriv_1(u_offset)[0]])
+    normal_vector_offset /= np.linalg.norm(normal_vector_offset)
+
+    center_offset_pos = np.array(param_curve(u_offset)) + radius_of_curvature_offset * normal_vector_offset
+    center_offset_neg = np.array(param_curve(u_offset)) - radius_of_curvature_offset * normal_vector_offset
+        
+    # Calculate the center of curvature
+    center_of_curvature_pos = np.array(param_curve(u)) + radius_of_curvature * normal_vector
+    center_of_curvature_neg = np.array(param_curve(u)) - radius_of_curvature * normal_vector
+
+    if np.linalg.norm([center_offset_pos - center_of_curvature_pos], 2) < np.linalg.norm([center_offset_neg - center_of_curvature_neg], 2):
+        center_of_curvature = center_of_curvature_pos
+    else:
+        center_of_curvature = center_of_curvature_neg
+
+    return center_of_curvature, radius_of_curvature
+
+
+def simulate_river(param_curve, t, precision=1000, speed_coeffecient=1):
+    u = np.linspace(0, 1, precision)
+    New_river = np.zeros((len(u), 2))
+    for i in range(len(u)):
+        u_i = u[i]
+        center_of_curvature, radius_of_curvature_OG = find_center_of_curvature(param_curve, u_i)
+        speed_coeff = speed_coeffecient/(radius_of_curvature_OG**1.5)  # Adjust this coefficient to control the speed of change
+        # print("Speed coefficient is ", speed_coeff)
+        radius_of_curvature = radius_of_curvature_OG * (1 + speed_coeff * t)
+        direction_vector = np.array([param_curve(u_i)[0] - center_of_curvature[0], param_curve(u_i)[1] - center_of_curvature[1]])
+        direction_vector /= np.linalg.norm(direction_vector)
+
+        New_river[i] = center_of_curvature + radius_of_curvature * direction_vector
+    
+    New_river_data = pd.DataFrame(New_river,columns=data.columns)
+    return New_river_data
+
+
+
+
+def simulate_river_over_time(param_curve, time_step, num_steps, a = 1):
+    time_steps = np.linspace(time_step, time_step * num_steps, num_steps)
+    river_paths = []
+    for t in time_steps:
+        if t == time_steps[0]:
+            New_river_data = simulate_river(param_curve, time_step,speed_coeffecient=a)
+        else:
+            New_river_data = simulate_river(New_river_curve, time_step, speed_coeffecient=a)
+
+        New_river_curve = get_curve(New_river_data, None, smooth_factor=1000)
+        river_paths.append(New_river_curve)
+
+    return river_paths
+
+
+
+# Gibbon_River_Dict = dict_of_riverfiles("Gibbon_River")
+# plot_river_info(Gibbon_River_Dict, 500, "Gibbon River")
+
+
+# Purus_River_Dict = dict_of_riverfiles("Purus_River")
+# plot_river_info(Purus_River_Dict,500,"Purus River")
+
+find_best_speed_coeff("Gibbon_River")
